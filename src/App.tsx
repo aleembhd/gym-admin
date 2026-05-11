@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   ReceiptText, 
@@ -17,6 +17,7 @@ import {
   Dumbbell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase, MemberRecord } from './supabaseClient';
 
 // --- Types ---
 
@@ -24,10 +25,12 @@ interface Member {
   id: string;
   name: string;
   phone: string;
+  email: string;
   daysLeft: number;
-  lastPaymentDate: string;
   amount: number;
   dateOfJoining: string; // empty string = not yet assigned
+  createdAt: string; // for "NEW" tag calculation
+  planMonths: number; // duration in months
 }
 
 enum Screen {
@@ -36,80 +39,388 @@ enum Screen {
   ANNOUNCEMENTS = 'announcements'
 }
 
-// --- Mock Data (Indian names & numbers) ---
+// --- Helper Functions ---
 
-const INITIAL_MEMBERS: Member[] = [
-  { id: '1', name: 'Arjun Sharma',    phone: '+91 98765 43210', daysLeft: 5,  lastPaymentDate: '2024-03-15', amount: 1200, dateOfJoining: '2023-06-10' },
-  { id: '2', name: 'Priya Nair',      phone: '+91 90123 45678', daysLeft: 28, lastPaymentDate: '2024-04-10', amount: 1500, dateOfJoining: '2023-09-01' },
-  { id: '3', name: 'Rahul Verma',     phone: '+91 87654 32109', daysLeft: 3,  lastPaymentDate: '2024-03-01', amount: 999,  dateOfJoining: '2024-01-15' },
-  { id: '4', name: 'Deepika Reddy',   phone: '+91 99887 76655', daysLeft: 60, lastPaymentDate: '2024-04-20', amount: 1800, dateOfJoining: '2023-11-20' },
-  { id: '5', name: 'Karthik Iyer',    phone: '+91 91234 56789', daysLeft: 1,  lastPaymentDate: '2024-02-28', amount: 1100, dateOfJoining: '2024-02-01' },
-  { id: '6', name: 'Sneha Kulkarni',  phone: '+91 88001 12233', daysLeft: 45, lastPaymentDate: '2024-04-05', amount: 1350, dateOfJoining: '2024-03-01' },
-  { id: '7', name: 'Vikram Pillai',   phone: '+91 93456 78901', daysLeft: 12, lastPaymentDate: '2024-03-20', amount: 2000, dateOfJoining: '2023-07-25' },
-  // New members — no plan or amount assigned yet
-  { id: '8', name: 'Meera Joshi',     phone: '+91 97001 22334', daysLeft: 0,  lastPaymentDate: '', amount: 0, dateOfJoining: '' },
-  { id: '9', name: 'Saurabh Tiwari',  phone: '+91 94455 66778', daysLeft: 0,  lastPaymentDate: '', amount: 0, dateOfJoining: '' },
+const calculateDaysLeft = (joinedDate: string | null, planMonths: number): number => {
+  if (!joinedDate) return 0;
+  
+  const joined = new Date(joinedDate);
+  const today = new Date();
+  const expiryDate = new Date(joined);
+  expiryDate.setMonth(expiryDate.getMonth() + planMonths);
+  
+  const diffTime = expiryDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return Math.max(0, diffDays);
+};
+
+const isNewMember = (createdAt: string): boolean => {
+  const created = new Date(createdAt);
+  const today = new Date();
+  const diffTime = today.getTime() - created.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays <= 4; // Show "NEW" tag for 4 days from creation
+};
+
+// --- Mock Data (Fallback if Supabase fails) ---
+const MOCK_MEMBERS: Member[] = [
+  { 
+    id: '1', 
+    name: 'Croxton Technologies', 
+    phone: '7878888888',
+    email: 'croxtontechnologies@gmail.com',
+    daysLeft: 0, 
+    amount: 0, 
+    dateOfJoining: '', 
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+    planMonths: 0
+  },
+  { 
+    id: '2', 
+    name: 'Abdul Aleem', 
+    phone: '7672029401',
+    email: 'abdul.aleem4020@gmail.com',
+    daysLeft: 0, 
+    amount: 0, 
+    dateOfJoining: '', 
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
+    planMonths: 0
+  },
 ];
 
 // --- Components ---
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<Screen>(Screen.MEMBERS);
-  const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [amountInput, setAmountInput] = useState('');
+  
+  // Track sent receipts with timestamps
+  const [sentReceipts, setSentReceipts] = useState<{ [key: string]: number }>(() => {
+    const stored = localStorage.getItem('sentReceipts');
+    return stored ? JSON.parse(stored) : {};
+  });
+  const [selectedPlanMonths, setSelectedPlanMonths] = useState<{ [key: string]: number }>(() => {
+    // Load from localStorage on initial render
+    const stored = localStorage.getItem('memberPlanMonths');
+    return stored ? JSON.parse(stored) : {};
+  });
 
-  // Fixed display order — sorted once at load, never re-sorted during the session.
-  // Cards update in-place; positions only change on a full page refresh.
-  const [displayOrder] = useState<string[]>(() =>
-    [...INITIAL_MEMBERS]
-      .sort((a, b) => a.daysLeft - b.daysLeft)
-      .map(m => m.id)
-  );
+  // Save plan months to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('memberPlanMonths', JSON.stringify(selectedPlanMonths));
+  }, [selectedPlanMonths]);
 
-  const orderedMembers = displayOrder
-    .map(id => members.find(m => m.id === id))
-    .filter(Boolean) as Member[];
+  // Save sent receipts to localStorage (no cleanup - permanent until plan update)
+  useEffect(() => {
+    localStorage.setItem('sentReceipts', JSON.stringify(sentReceipts));
+  }, [sentReceipts]);
 
-  const handleUpdateMembership = (id: string, months: number) => {
-    const today = new Date().toISOString().split('T')[0];
-    const daysToAdd = months * 30;
-    setMembers(prev => prev.map(m => {
-      if (m.id !== id) return m;
-      if (!m.dateOfJoining) {
-        // First-time plan: set today as joining date, days = exact selection
-        return { ...m, dateOfJoining: today, daysLeft: daysToAdd };
+  // Fetch members from Supabase
+  useEffect(() => {
+    fetchMembers();
+  }, []);
+
+  // Check if receipt was sent (permanent until plan update)
+  const isReceiptSent = (memberId: string): boolean => {
+    return !!sentReceipts[memberId];
+  };
+
+  const fetchMembers = async () => {
+    try {
+      setLoading(true);
+      
+      console.log('Connecting to Supabase...');
+      console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      
+      // Try to fetch from Supabase - using 'registrations' table
+      const { data: fetchedData, error } = await supabase
+        .from('registrations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(`Database error: ${error.message}`);
       }
-      // Existing member: extend from current remaining days
-      return { ...m, daysLeft: m.daysLeft + daysToAdd };
-    }));
+
+      console.log('Fetched data:', fetchedData);
+
+      if (fetchedData && fetchedData.length > 0) {
+        const transformedMembers: Member[] = fetchedData.map((record: any) => {
+          const planMonths = selectedPlanMonths[record.id.toString()] || record.plan_months || 0;
+          const daysLeft = calculateDaysLeft(record.joined, planMonths);
+          
+          return {
+            id: record.id.toString(),
+            name: record.name || 'Unknown',
+            phone: record.phone || 'N/A',
+            email: record.email || '',
+            daysLeft: daysLeft,
+            amount: record.amount || 0,
+            dateOfJoining: record.joined || '',
+            createdAt: record.created_at || new Date().toISOString(),
+            planMonths: planMonths,
+          };
+        });
+
+        console.log('Transformed members:', transformedMembers);
+        setMembers(transformedMembers);
+      } else {
+        console.log('No members found in database, using mock data');
+        setMembers(MOCK_MEMBERS);
+      }
+    } catch (error: any) {
+      console.error('Error fetching members:', error);
+      alert(`Failed to fetch members: ${error.message}\n\nUsing sample data for now.`);
+      setMembers(MOCK_MEMBERS);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSendReceipt = (name: string) => {
-    alert(`Receipt sent to ${name}!`);
+  // Sort members: urgent (< 7 days) first, then by created_at (newest first)
+  const orderedMembers = [...members].sort((a, b) => {
+    const aUrgent = a.daysLeft > 0 && a.daysLeft < 7;
+    const bUrgent = b.daysLeft > 0 && b.daysLeft < 7;
+    
+    if (aUrgent && !bUrgent) return -1;
+    if (!aUrgent && bUrgent) return 1;
+    
+    // If both urgent or both not urgent, sort by created_at (newest first)
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const handleUpdateMembership = async (id: string, months: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const member = members.find(m => m.id === id);
+    
+    if (!member) return;
+
+    try {
+      let joinedDate = member.dateOfJoining;
+      
+      // If no joining date, set today as joining date
+      if (!joinedDate) {
+        joinedDate = today;
+        
+        // Try to update both joined date and plan_months in database
+        const updateData: any = { joined: joinedDate };
+        
+        // Try to include plan_months if the column exists
+        try {
+          updateData.plan_months = months;
+        } catch (e) {
+          // Column might not exist, that's okay
+        }
+        
+        const { error } = await supabase
+          .from('registrations')
+          .update(updateData)
+          .eq('id', parseInt(id));
+
+        if (error) {
+          // If error is about plan_months column not existing, try without it
+          if (error.message.includes('plan_months')) {
+            const { error: retryError } = await supabase
+              .from('registrations')
+              .update({ joined: joinedDate })
+              .eq('id', parseInt(id));
+            
+            if (retryError) throw retryError;
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        // Try to update plan_months for existing member
+        try {
+          await supabase
+            .from('registrations')
+            .update({ plan_months: months })
+            .eq('id', parseInt(id));
+        } catch (e) {
+          // Column might not exist, that's okay - we'll use localStorage
+        }
+      }
+
+      // Store the plan months locally
+      setSelectedPlanMonths(prev => ({
+        ...prev,
+        [id]: months
+      }));
+
+      // Calculate days left
+      const daysLeft = calculateDaysLeft(joinedDate, months);
+
+      // Reset receipt sent status when plan is updated
+      setSentReceipts(prev => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
+
+      // Update local state
+      setMembers(prev => prev.map(m => 
+        m.id === id 
+          ? { ...m, dateOfJoining: joinedDate, daysLeft, planMonths: months } 
+          : m
+      ));
+    } catch (error) {
+      console.error('Error updating membership:', error);
+      alert('Failed to update membership');
+    }
   };
 
-  const handleBroadcast = () => {
+  const handleSendReceipt = async (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return;
+
+    try {
+      // Show loading state
+      const button = document.activeElement as HTMLButtonElement;
+      if (button) button.disabled = true;
+
+      console.log('Sending receipt to webhook for:', member.name);
+
+      // Prepare webhook payload
+      const payload = {
+        name: member.name,
+        phone: member.phone,
+        email: member.email,
+        amount: member.amount,
+        daysLeft: member.daysLeft,
+        dateOfJoining: member.dateOfJoining,
+        duration: member.planMonths, // duration in months
+        timestamp: new Date().toISOString()
+      };
+
+      console.log('Webhook payload:', payload);
+
+      // Call the webhook
+      const webhookUrl = import.meta.env.VITE_WEBHOOK_URL;
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log('Webhook response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Webhook failed with status: ${response.status}`);
+      }
+
+      const result = await response.text();
+      console.log('Webhook response:', result);
+
+      // Mark receipt as sent with current timestamp
+      setSentReceipts(prev => ({
+        ...prev,
+        [memberId]: Date.now()
+      }));
+
+      alert(`✅ Receipt sent successfully to ${member.name}!\nEmail: ${member.email}`);
+    } catch (error: any) {
+      console.error('Error sending receipt:', error);
+      alert(`❌ Failed to send receipt: ${error.message}`);
+    } finally {
+      // Re-enable button
+      const button = document.activeElement as HTMLButtonElement;
+      if (button) button.disabled = false;
+    }
+  };
+
+  const handleBroadcast = async () => {
     if (!broadcastMessage.trim()) return;
+    
     setIsSending(true);
-    setTimeout(() => {
-      alert(`Announcement broadcasted to all ${members.length} members!`);
+    
+    try {
+      console.log('Sending broadcast to webhook...');
+      
+      // Prepare broadcast payload
+      const payload = {
+        message: broadcastMessage,
+        totalMembers: members.length,
+        members: members.map(m => ({
+          name: m.name,
+          phone: m.phone,
+          email: m.email
+        })),
+        timestamp: new Date().toISOString()
+      };
+
+      console.log('Broadcast payload:', payload);
+
+      // Call the broadcast webhook
+      const webhookUrl = import.meta.env.VITE_BROADCAST_WEBHOOK_URL;
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log('Broadcast webhook response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Webhook failed with status: ${response.status}`);
+      }
+
+      const result = await response.text();
+      console.log('Broadcast webhook response:', result);
+
+      alert(`✅ Announcement sent to all ${members.length} members!`);
       setBroadcastMessage('');
+    } catch (error: any) {
+      console.error('Error sending broadcast:', error);
+      alert(`❌ Failed to send broadcast: ${error.message}`);
+    } finally {
       setIsSending(false);
-    }, 1500);
+    }
   };
 
   const handleAmountEdit = (member: Member) => {
     setEditingAmountId(member.id);
-    setAmountInput(String(member.amount));
+    // Set empty string if amount is 0, otherwise show the amount
+    setAmountInput(member.amount === 0 ? '' : String(member.amount));
   };
 
-  const handleAmountSave = (id: string) => {
+  const handleAmountSave = async (id: string) => {
     const parsed = parseInt(amountInput);
     if (!isNaN(parsed) && parsed > 0) {
-      setMembers(prev => prev.map(m => m.id === id ? { ...m, amount: parsed } : m));
+      try {
+        // Update in database
+        const { error } = await supabase
+          .from('registrations')
+          .update({ amount: parsed })
+          .eq('id', parseInt(id));
+
+        if (error) throw error;
+
+        // Reset receipt sent status when amount is updated
+        setSentReceipts(prev => {
+          const updated = { ...prev };
+          delete updated[id];
+          return updated;
+        });
+
+        // Update local state
+        setMembers(prev => prev.map(m => m.id === id ? { ...m, amount: parsed } : m));
+      } catch (error) {
+        console.error('Error updating amount:', error);
+        alert('Failed to update amount');
+      }
     }
     setEditingAmountId(null);
   };
@@ -133,7 +444,7 @@ export default function App() {
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
               <Dumbbell size={16} />
             </div>
-            <span className="text-indigo-600 font-extrabold">Light</span>
+            <span className="text-indigo-600 font-extrabold">Elite</span>
             <span className="text-slate-800 font-extrabold -ml-1.5">Gym</span>
           </h1>
           <div className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
@@ -143,7 +454,16 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto py-6">
-        <AnimatePresence mode="wait">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full"
+            />
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
           {activeScreen === Screen.MEMBERS && (
             <motion.div
               key="members"
@@ -156,7 +476,7 @@ export default function App() {
               <div className="flex justify-between items-center mb-2 px-4">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Active Members</h2>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-3xl font-black text-indigo-600 leading-none">{members.length}</span>
+                  <span className="text-2xl font-bold text-indigo-600 leading-none">{members.length}</span>
                   <span className="text-xs text-slate-400 font-medium leading-tight">Total</span>
                 </div>
               </div>
@@ -170,7 +490,7 @@ export default function App() {
                   className="bg-white p-4 shadow-sm border-y sm:border border-slate-100 flex flex-col gap-3 relative overflow-hidden"
                 >
                   {/* NEW Tag */}
-                  {index < 3 && (
+                  {isNewMember(member.createdAt) && (
                     <div className="absolute top-0 left-0">
                       <div className="bg-indigo-600 text-white text-[8px] font-black px-2 py-0.5 rounded-br-lg shadow-sm">
                         NEW
@@ -181,9 +501,9 @@ export default function App() {
                   {/* Row 1: Name + Days Left */}
                   <div className="flex justify-between items-start gap-3">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-extrabold text-2xl text-slate-800 leading-tight">{member.name}</h3>
-                      <p className="text-base text-slate-500 flex items-center gap-1.5 mt-0.5">
-                        <Phone size={15} /> {member.phone}
+                      <h3 className="font-bold text-base text-slate-800 leading-tight">{member.name}</h3>
+                      <p className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5">
+                        <Phone size={13} /> {member.phone}
                       </p>
                     </div>
                     <div className={`text-xs font-bold px-2 py-1 rounded-full shrink-0 ${
@@ -198,9 +518,9 @@ export default function App() {
                   </div>
 
                   {/* Row 2: Date of Joining + Amount */}
-                  <div className="flex items-center gap-3 text-base text-slate-500">
+                  <div className="flex items-center gap-3 text-sm text-slate-500">
                     <div className="flex items-center gap-1.5">
-                      <CalendarDays size={17} className="text-indigo-400" />
+                      <CalendarDays size={14} className="text-indigo-400" />
                       <span className="font-medium">Joined:</span>
                       <span className={`${member.dateOfJoining ? 'text-slate-700' : 'text-slate-400 italic'}`}>
                         {member.dateOfJoining ? formatDate(member.dateOfJoining) : 'Not assigned'}
@@ -209,8 +529,8 @@ export default function App() {
                     <div className="w-px h-5 bg-slate-200" />
                     {/* Amount display */}
                     <div className="flex items-center gap-1">
-                      <IndianRupee size={20} className={member.amount === 0 ? 'text-slate-300' : 'text-emerald-500'} />
-                      <span className={`text-xl font-extrabold ${member.amount === 0 ? 'text-slate-400' : 'text-emerald-600'}`}>
+                      <IndianRupee size={14} className={member.amount === 0 ? 'text-slate-300' : 'text-emerald-500'} />
+                      <span className={`text-sm font-bold ${member.amount === 0 ? 'text-slate-400' : 'text-emerald-600'}`}>
                         {member.amount.toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -298,26 +618,45 @@ export default function App() {
                   key={member.id} 
                   className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100"
                 >
-                  <div className="flex justify-between items-center gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold border border-slate-200">
-                        {member.name.charAt(0)}
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-800">{member.name}</h3>
-                        <p className="text-xs text-indigo-600 font-medium">Valid for {member.daysLeft} days</p>
-                        <p className="text-xs text-emerald-600 font-semibold flex items-center gap-0.5 mt-0.5">
-                          <IndianRupee size={10} />
-                          {member.amount.toLocaleString('en-IN')}
+                  <div className="flex justify-between items-center gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">{member.name}</h3>
+                      <p className="text-xs text-indigo-600 font-medium">Valid for {member.daysLeft} days</p>
+                      {member.daysLeft > 0 && member.daysLeft <= 7 && (
+                        <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-0.5">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                          Reminder sent
                         </p>
-                      </div>
+                      )}
+                      <p className="text-xs text-emerald-600 font-semibold flex items-center gap-0.5 mt-0.5">
+                        <IndianRupee size={10} />
+                        {member.amount.toLocaleString('en-IN')}
+                      </p>
                     </div>
-                    <button 
-                      onClick={() => handleSendReceipt(member.name)}
-                      className="bg-indigo-600 text-white rounded-xl py-2 px-4 text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
-                    >
-                      <ReceiptText size={14} /> Send Receipt
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isReceiptSent(member.id) ? (
+                        <button
+                          disabled
+                          className="bg-emerald-500 text-white rounded-xl py-2 px-4 text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-100 cursor-not-allowed opacity-90"
+                        >
+                          <CheckCircle2 size={14} /> Sent
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleSendReceipt(member.id)}
+                          className="bg-indigo-600 text-white rounded-xl py-2 px-4 text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
+                        >
+                          <ReceiptText size={14} /> Send Receipt
+                        </button>
+                      )}
+                      <a
+                        href={`tel:${member.phone.replace(/\s/g, '')}`}
+                        className="w-9 h-9 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:bg-black active:scale-95 transition-all"
+                        title={`Call ${member.name}`}
+                      >
+                        <Phone size={15} />
+                      </a>
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -330,20 +669,20 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-6 px-4"
+              className="space-y-5 px-4"
             >
-              <div className="text-center space-y-2 py-4">
-                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
-                  <Megaphone size={32} />
+              <div className="text-center space-y-2 py-3">
+                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto">
+                  <Megaphone size={28} />
                 </div>
-                <h2 className="text-xl font-bold tracking-tight">Mass Broadcast</h2>
-                <p className="text-sm text-slate-500">Updates will be sent to all your active members.</p>
+                <h2 className="text-lg font-bold tracking-tight text-slate-800">Gym Announcements</h2>
+                <p className="text-xs text-slate-500">Send updates to all {members.length} members</p>
               </div>
 
-              <div className="bg-white rounded-2xl p-1 shadow-sm border border-slate-100 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+              <div className="bg-white rounded-xl p-1 shadow-sm border border-slate-200 focus-within:border-indigo-300 transition-all">
                 <textarea 
-                  className="w-full bg-transparent p-4 min-h-[200px] text-slate-800 outline-none resize-none placeholder:text-slate-300"
-                  placeholder="Hey everyone! We have a special yoga session this Sunday at 10 AM..."
+                  className="w-full bg-transparent p-3 min-h-[160px] text-sm text-slate-800 outline-none resize-none placeholder:text-slate-400"
+                  placeholder="Example: Gym closed tomorrow for maintenance. Regular hours resume on Monday."
                   value={broadcastMessage}
                   onChange={(e) => setBroadcastMessage(e.target.value)}
                 />
@@ -352,10 +691,10 @@ export default function App() {
               <button 
                 onClick={handleBroadcast}
                 disabled={!broadcastMessage.trim() || isSending}
-                className={`w-full py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-xl transition-all active:scale-[0.98] ${
+                className={`w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                   !broadcastMessage.trim() || isSending
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                    : 'bg-indigo-600 text-white shadow-indigo-200'
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
                 }`}
               >
                 {isSending ? (
@@ -369,20 +708,20 @@ export default function App() {
                   </span>
                 ) : (
                   <>
-                    <Send size={16} /> Broadcast to {members.length} Members
+                    <Send size={16} /> Send to All Members
                   </>
                 )}
               </button>
 
-              <div className="p-4 bg-indigo-50 rounded-xl flex gap-3 items-start border border-indigo-100">
-                <CheckCircle2 size={16} className="text-indigo-600 mt-0.5 shrink-0" />
-                <p className="text-xs leading-relaxed text-indigo-700">
-                  <strong>Pro Tip:</strong> Use broadcast for holiday announcements, class schedule changes, or membership special offers.
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  <strong className="text-slate-700">Quick Tips:</strong> Use for class schedule changes, holiday hours, new equipment arrivals, or special workout sessions.
                 </p>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+        )}
       </main>
 
       {/* Bottom Navigation */}
