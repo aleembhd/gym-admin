@@ -1,0 +1,49 @@
+═══════════════════════════════════════════════════════════════
+                    🔧 QUICK FIX - 3 STEPS
+═══════════════════════════════════════════════════════════════
+
+PROBLEM: Table 'members' doesn't exist in your Supabase database
+
+SOLUTION:
+
+┌─────────────────────────────────────────────────────────────┐
+│ STEP 1: Go to Supabase                                      │
+└─────────────────────────────────────────────────────────────┘
+  → Open: https://supabase.com/dashboard
+  → Click: SQL Editor (left sidebar)
+  → Click: New Query
+
+┌─────────────────────────────────────────────────────────────┐
+│ STEP 2: Run This SQL                                        │
+└─────────────────────────────────────────────────────────────┘
+  → Copy the SQL from "create-table.sql" file
+  → Paste it in the SQL Editor
+  → Click "Run" button
+  → Wait for "Success" message
+
+┌─────────────────────────────────────────────────────────────┐
+│ STEP 3: Restart App                                         │
+└─────────────────────────────────────────────────────────────┘
+  → Stop server: Ctrl+C
+  → Start again: npm run dev
+  → Refresh browser: F5
+
+═══════════════════════════════════════════════════════════════
+
+THAT'S IT! Your app should now load data from Supabase.
+
+═══════════════════════════════════════════════════════════════
+
+VERIFY IT WORKED:
+  ✓ Go to Supabase → Table Editor
+  ✓ You should see "members" table
+  ✓ It should have 3 sample members
+  ✓ Your app should display those members
+
+═══════════════════════════════════════════════════════════════
+
+STILL NOT WORKING?
+  → Check FIX_INSTRUCTIONS.md for detailed troubleshooting
+  → Open browser console (F12) and share the error message
+
+═══════════════════════════════════════════════════════════════
