@@ -46,12 +46,15 @@ export function useMembers() {
       if (data && data.length > 0) {
         const transformed: Member[] = data.map((record: any) => {
           const planMonths = selectedPlanMonths[record.id.toString()] || record.plan_months || 0;
+          // Prefer live calculation from joined+plan_months; fall back to stored validity
+          const calculated = calculateDaysLeft(record.joined, planMonths);
+          const daysLeft = calculated > 0 ? calculated : (parseInt(record.validity) || 0);
           return {
             id: record.id.toString(),
             name: record.name || 'Unknown',
             phone: record.phone || 'N/A',
             email: record.email || '',
-            daysLeft: calculateDaysLeft(record.joined, planMonths),
+            daysLeft,
             amount: record.amount || 0,
             dateOfJoining: record.joined || '',
             createdAt: record.created_at || new Date().toISOString(),
@@ -59,10 +62,11 @@ export function useMembers() {
           };
         });
 
-        // Sync receipt_status from DB for cross-device consistency
+        // Sync receipt_status from DB for cross-device consistency.
+        // Column type is text, so the DB returns the string "true", not boolean true.
         const dbReceipts: Record<string, number> = {};
         data.forEach((record: any) => {
-          if (record.receipt_status === true) {
+          if (String(record.receipt_status) === 'true') {
             dbReceipts[record.id.toString()] = Date.now();
           }
         });
@@ -96,30 +100,27 @@ export function useMembers() {
 
       if (!joinedDate) {
         joinedDate = today;
-        const { error } = await supabase
-          .from('registrations')
-          .update({ joined: joinedDate, plan_months: months })
-          .eq('id', parseInt(id));
+      }
 
-        if (error) {
-          if (error.message.includes('plan_months')) {
-            const { error: retryError } = await supabase
-              .from('registrations')
-              .update({ joined: joinedDate })
-              .eq('id', parseInt(id));
-            if (retryError) throw retryError;
-          } else {
-            throw error;
-          }
-        }
-      } else {
-        try {
-          await supabase
+      const daysLeft = calculateDaysLeft(joinedDate, months);
+
+      // Always write joined + validity (both columns confirmed to exist).
+      // Attempt plan_months in the same call; if that column is absent, retry without it.
+      const { error } = await supabase
+        .from('registrations')
+        .update({ joined: joinedDate, validity: daysLeft, plan_months: months, receipt_status: false })
+        .eq('id', parseInt(id));
+
+      if (error) {
+        if (error.message.includes('plan_months')) {
+          // plan_months column absent — retry keeping joined + validity + receipt reset
+          const { error: e2 } = await supabase
             .from('registrations')
-            .update({ plan_months: months })
+            .update({ joined: joinedDate, validity: daysLeft, receipt_status: false })
             .eq('id', parseInt(id));
-        } catch {
-          // Column might not exist — localStorage fallback handles it
+          if (e2) throw e2;
+        } else {
+          throw error;
         }
       }
 
@@ -133,7 +134,7 @@ export function useMembers() {
 
       setMembers(prev => prev.map(m =>
         m.id === id
-          ? { ...m, dateOfJoining: joinedDate, daysLeft: calculateDaysLeft(joinedDate, months), planMonths: months }
+          ? { ...m, dateOfJoining: joinedDate, daysLeft, planMonths: months }
           : m
       ));
     } catch (error) {

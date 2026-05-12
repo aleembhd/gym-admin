@@ -22,5 +22,6 @@ export interface MemberRecord {
   joined: string | null;
   amount: number | null;
   plan_months?: number | null;
-  receipt_status?: boolean | null; // true once a receipt has been sent; synced across devices
+  receipt_status?: boolean | string | null; // stored as text "true"/"false" in DB
+  validity?: number | string | null;        // days left at time of plan selection
 }
