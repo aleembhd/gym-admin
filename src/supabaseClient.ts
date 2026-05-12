@@ -21,5 +21,6 @@ export interface MemberRecord {
   email: string;
   joined: string | null;
   amount: number | null;
-  plan_months?: number | null; // Optional: for storing selected plan duration
+  plan_months?: number | null;
+  receipt_status?: boolean | null; // true once a receipt has been sent; synced across devices
 }
