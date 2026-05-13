@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import type { Member } from '../types';
-import { calculateDaysLeft, MOCK_MEMBERS } from '../utils/helpers';
+import { calculateDaysLeft } from '../utils/helpers';
 
 export function useMembers() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -76,13 +76,13 @@ export function useMembers() {
 
         setMembers(transformed);
       } else {
-        setMembers(MOCK_MEMBERS);
+        setMembers([]);
       }
     } catch (error: any) {
       console.error('Error fetching members:', error);
       if (!isManualRefresh) {
-        alert(`Failed to fetch members: ${error.message}\n\nUsing sample data for now.`);
-        setMembers(MOCK_MEMBERS);
+        alert(`Failed to fetch members: ${error.message}`);
+        setMembers([]);
       }
     } finally {
       setLoading(false);
