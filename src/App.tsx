@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
@@ -10,6 +10,8 @@ import { Screen } from './types';
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<Screen>(Screen.MEMBERS);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const {
     members,
@@ -23,9 +25,43 @@ export default function App() {
     handleAmountSave,
   } = useMembers();
 
+  const showSearch = activeScreen !== Screen.ANNOUNCEMENTS;
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredMembers = normalizedSearch
+    ? members.filter(member => member.name.toLowerCase().includes(normalizedSearch))
+    : members;
+  const filteredOrderedMembers = normalizedSearch
+    ? orderedMembers.filter(member => member.name.toLowerCase().includes(normalizedSearch))
+    : orderedMembers;
+
+  useEffect(() => {
+    if (!showSearch) {
+      setSearchOpen(false);
+      setSearchQuery('');
+    }
+  }, [showSearch]);
+
+  const handleSearchToggle = () => {
+    if (searchOpen) {
+      setSearchOpen(false);
+      setSearchQuery('');
+      return;
+    }
+
+    setSearchOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24">
-      <Header isRefreshing={isRefreshing} onRefresh={() => fetchMembers(true)} />
+      <Header
+        showSearch={showSearch}
+        isSearchOpen={searchOpen}
+        searchQuery={searchQuery}
+        isRefreshing={isRefreshing}
+        onSearchToggle={handleSearchToggle}
+        onSearchChange={setSearchQuery}
+        onRefresh={() => fetchMembers(true)}
+      />
 
       <main className="max-w-md mx-auto py-6">
         {loading ? (
@@ -40,15 +76,15 @@ export default function App() {
           <AnimatePresence mode="wait">
             {activeScreen === Screen.MEMBERS && (
               <MembersScreen
-                members={members}
-                orderedMembers={orderedMembers}
+                members={filteredMembers}
+                orderedMembers={filteredOrderedMembers}
                 onUpdateMembership={handleUpdateMembership}
                 onAmountSave={handleAmountSave}
               />
             )}
             {activeScreen === Screen.RECEIPTS && (
               <ReceiptsScreen
-                orderedMembers={orderedMembers}
+                orderedMembers={filteredOrderedMembers}
                 isReceiptSent={isReceiptSent}
                 onSendReceipt={handleSendReceipt}
               />

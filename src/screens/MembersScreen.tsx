@@ -54,20 +54,26 @@ export default function MembersScreen({
         </div>
       </div>
 
-      {orderedMembers.map((member, index) => (
-        <MemberCard
-          key={member.id}
-          member={member}
-          index={index}
-          isEditing={editingAmountId === member.id}
-          amountInput={amountInput}
-          onAmountInputChange={setAmountInput}
-          onAmountSave={() => handleSave(member.id)}
-          onAmountCancel={handleCancel}
-          onStartEdit={() => handleStartEdit(member)}
-          onUpdateMembership={months => onUpdateMembership(member.id, months)}
-        />
-      ))}
+      {orderedMembers.length === 0 ? (
+        <div className="px-4 py-10 text-center text-sm text-slate-400">
+          No members found.
+        </div>
+      ) : (
+        orderedMembers.map((member, index) => (
+          <MemberCard
+            key={member.id}
+            member={member}
+            index={index}
+            isEditing={editingAmountId === member.id}
+            amountInput={amountInput}
+            onAmountInputChange={setAmountInput}
+            onAmountSave={() => handleSave(member.id)}
+            onAmountCancel={handleCancel}
+            onStartEdit={() => handleStartEdit(member)}
+            onUpdateMembership={months => onUpdateMembership(member.id, months)}
+          />
+        ))
+      )}
     </motion.div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import type { Member } from '../types';
 import { calculateDaysLeft } from '../utils/helpers';
 
@@ -7,6 +7,7 @@ export function useMembers() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAddingMember, setIsAddingMember] = useState(false);
 
   const [sentReceipts, setSentReceipts] = useState<Record<string, number>>(() => {
     const stored = localStorage.getItem('sentReceipts');
@@ -35,6 +36,11 @@ export function useMembers() {
   const fetchMembers = async (isManualRefresh = false) => {
     try {
       isManualRefresh ? setIsRefreshing(true) : setLoading(true);
+
+      if (!supabase || !isSupabaseConfigured) {
+        setMembers([]);
+        return;
+      }
 
       const { data, error } = await supabase
         .from('registrations')
@@ -95,6 +101,11 @@ export function useMembers() {
     const member = members.find(m => m.id === id);
     if (!member) return;
 
+    if (!supabase || !isSupabaseConfigured) {
+      alert('Supabase is not configured, so membership updates are disabled in preview mode.');
+      return;
+    }
+
     try {
       let joinedDate = member.dateOfJoining;
 
@@ -147,6 +158,11 @@ export function useMembers() {
     const member = members.find(m => m.id === memberId);
     if (!member) return;
 
+    if (!supabase || !isSupabaseConfigured) {
+      alert('Supabase is not configured, so receipt sending is disabled in preview mode.');
+      return;
+    }
+
     // Optimistic update — flip UI immediately
     setSentReceipts(prev => ({ ...prev, [memberId]: Date.now() }));
 
@@ -195,6 +211,11 @@ export function useMembers() {
   };
 
   const handleAmountSave = async (id: string, amountValue: number) => {
+    if (!supabase || !isSupabaseConfigured) {
+      alert('Supabase is not configured, so amount updates are disabled in preview mode.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('registrations')
@@ -216,6 +237,40 @@ export function useMembers() {
     }
   };
 
+  const handleCreateMember = async (payload: { name: string; phone: string; email: string; planMonths: number; amount: number }) => {
+    if (!supabase || !isSupabaseConfigured) {
+      throw new Error('Supabase is not configured.');
+    }
+
+    try {
+      setIsAddingMember(true);
+
+      const today = new Date().toISOString().split('T')[0];
+      const hasPlan = payload.planMonths > 0;
+
+      const { error } = await supabase
+        .from('registrations')
+        .insert({
+          name: payload.name,
+          phone: payload.phone,
+          email: payload.email || null,
+          joined: hasPlan ? today : null,
+          amount: payload.amount || 0,
+          plan_months: hasPlan ? payload.planMonths : 0,
+          receipt_status: false,
+        });
+
+      if (error) throw error;
+
+      await fetchMembers(true);
+    } catch (error) {
+      console.error('Error creating member:', error);
+      throw error;
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
   const orderedMembers = [...members].sort((a, b) => {
     const aUrgent = a.daysLeft > 0 && a.daysLeft < 7;
     const bUrgent = b.daysLeft > 0 && b.daysLeft < 7;
@@ -234,5 +289,7 @@ export function useMembers() {
     handleUpdateMembership,
     handleSendReceipt,
     handleAmountSave,
+    handleCreateMember,
+    isAddingMember,
   };
 }
