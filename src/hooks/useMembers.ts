@@ -14,6 +14,8 @@ export function useMembers() {
     return stored ? JSON.parse(stored) : {};
   });
 
+  const [sendingReceipts, setSendingReceipts] = useState<Record<string, boolean>>({});
+
   const [selectedPlanMonths, setSelectedPlanMonths] = useState<Record<string, number>>(() => {
     const stored = localStorage.getItem('memberPlanMonths');
     return stored ? JSON.parse(stored) : {};
@@ -31,7 +33,37 @@ export function useMembers() {
     fetchMembers();
   }, []);
 
+  // Recompute days-left at every midnight so the countdown decreases by 1
+  // exactly when the date changes, without needing a manual refresh.
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const recomputeDaysLeft = () => {
+      setMembers(prev =>
+        prev.map(m => ({
+          ...m,
+          daysLeft: m.dateOfJoining && m.planMonths
+            ? calculateDaysLeft(m.dateOfJoining, m.planMonths)
+            : m.daysLeft,
+        }))
+      );
+    };
+
+    const scheduleNextMidnight = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+      timeoutId = setTimeout(() => {
+        recomputeDaysLeft();
+        scheduleNextMidnight();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    scheduleNextMidnight();
+    return () => clearTimeout(timeoutId);
+  }, []);
+
   const isReceiptSent = (memberId: string) => !!sentReceipts[memberId];
+  const isReceiptSending = (memberId: string) => !!sendingReceipts[memberId];
 
   const fetchMembers = async (isManualRefresh = false) => {
     try {
@@ -163,8 +195,14 @@ export function useMembers() {
       return;
     }
 
-    // Optimistic update — flip UI immediately
-    setSentReceipts(prev => ({ ...prev, [memberId]: Date.now() }));
+    const webhookUrl = import.meta.env.VITE_WEBHOOK_URL;
+    if (!webhookUrl) {
+      alert('Webhook URL is not configured. Set VITE_WEBHOOK_URL in your .env file to enable receipt sending.');
+      return;
+    }
+
+    // Show loading until the request succeeds and WhatsApp opens
+    setSendingReceipts(prev => ({ ...prev, [memberId]: true }));
 
     try {
       const payload = {
@@ -178,13 +216,24 @@ export function useMembers() {
         timestamp: new Date().toISOString(),
       };
 
-      const response = await fetch(import.meta.env.VITE_WEBHOOK_URL, {
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error(`Webhook failed with status: ${response.status}`);
+
+      // The API returns a JSON object with a whatsappLink field.
+      // Extract it and open the WhatsApp conversation in a new tab.
+      const result = await response.json();
+      const whatsappLink = result?.whatsappLink;
+      if (whatsappLink) {
+        window.open(whatsappLink, '_blank');
+      }
+
+      // Mark as sent now that the request succeeded and WhatsApp opened
+      setSentReceipts(prev => ({ ...prev, [memberId]: Date.now() }));
 
       // Persist to DB so other devices see the sent status
       try {
@@ -199,14 +248,14 @@ export function useMembers() {
 
       alert(`✅ Receipt sent successfully to ${member.name}!\nEmail: ${member.email}`);
     } catch (error: any) {
-      // Revert optimistic update on failure
-      setSentReceipts(prev => {
+      console.error('Error sending receipt:', error);
+      alert(`❌ Failed to send receipt: ${error.message}`);
+    } finally {
+      setSendingReceipts(prev => {
         const updated = { ...prev };
         delete updated[memberId];
         return updated;
       });
-      console.error('Error sending receipt:', error);
-      alert(`❌ Failed to send receipt: ${error.message}`);
     }
   };
 
@@ -286,6 +335,7 @@ export function useMembers() {
     isRefreshing,
     fetchMembers,
     isReceiptSent,
+    isReceiptSending,
     handleUpdateMembership,
     handleSendReceipt,
     handleAmountSave,

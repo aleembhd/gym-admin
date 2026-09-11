@@ -20,6 +20,7 @@ export default function App() {
     isRefreshing,
     fetchMembers,
     isReceiptSent,
+    isReceiptSending,
     handleUpdateMembership,
     handleSendReceipt,
     handleAmountSave,
@@ -86,6 +87,7 @@ export default function App() {
               <ReceiptsScreen
                 orderedMembers={filteredOrderedMembers}
                 isReceiptSent={isReceiptSent}
+                isReceiptSending={isReceiptSending}
                 onSendReceipt={handleSendReceipt}
               />
             )}
