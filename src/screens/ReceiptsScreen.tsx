@@ -1,14 +1,15 @@
 import { motion } from 'motion/react';
-import { ReceiptText, Phone, CheckCircle2, IndianRupee } from 'lucide-react';
+import { Phone, CheckCircle2, IndianRupee } from 'lucide-react';
 import type { Member } from '../types';
 
 interface ReceiptsScreenProps {
   orderedMembers: Member[];
   isReceiptSent: (id: string) => boolean;
+  isReceiptSending: (id: string) => boolean;
   onSendReceipt: (id: string) => void;
 }
 
-export default function ReceiptsScreen({ orderedMembers, isReceiptSent, onSendReceipt }: ReceiptsScreenProps) {
+export default function ReceiptsScreen({ orderedMembers, isReceiptSent, isReceiptSending, onSendReceipt }: ReceiptsScreenProps) {
   return (
     <motion.div
       key="receipts"
@@ -57,13 +58,22 @@ export default function ReceiptsScreen({ orderedMembers, isReceiptSent, onSendRe
                   >
                     <CheckCircle2 size={14} /> Sent
                   </button>
+                ) : isReceiptSending(member.id) ? (
+                  <div className="w-9 h-9 flex items-center justify-center" title="Sending...">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                      className="w-5 h-5 border-2 border-emerald-200 border-t-emerald-600 rounded-full"
+                    />
+                  </div>
                 ) : (
-                  <button
+                  <img
+                    src="/whatsapp.png"
+                    alt="Send receipt via WhatsApp"
                     onClick={() => onSendReceipt(member.id)}
-                    className="bg-indigo-600 text-white rounded-xl py-2 px-4 text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
-                  >
-                    <ReceiptText size={14} /> Send Receipt
-                  </button>
+                    className="w-9 h-9 rounded-xl cursor-pointer object-contain hover:opacity-80 active:scale-95 transition-all"
+                    title={`Send receipt to ${member.name}`}
+                  />
                 )}
                 <a
                   href={`tel:${member.phone.replace(/\s/g, '')}`}
