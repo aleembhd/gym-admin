@@ -133,7 +133,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 text-slate-900 font-sans">
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white text-slate-900 font-sans">
       <Header
         searchQuery={searchQuery}
         isRefreshing={isRefreshing}
@@ -166,20 +166,24 @@ export default function App() {
       )}
 
       <main
-        className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 transition-transform"
-        style={{ transform: pullDistance > 0 ? `translateY(${pullDistance * 0.15}px)` : undefined }}
+        className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6"
+        style={{
+          transform: pullDistance > 0 ? `translateY(${pullDistance * 0.15}px)` : undefined,
+          // No transition while dragging (follows finger); smooth snap-back on release.
+          transition: pullDistance > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
       >
         {/* Title */}
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">
               Operations Floor · Today
             </p>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
               Membership control
             </h1>
           </div>
-          <p className="text-xs text-slate-400 font-medium">
+          <p className="text-xs text-slate-500 font-medium">
             {members.length} member{members.length === 1 ? '' : 's'} · 1 location
           </p>
         </div>
@@ -195,29 +199,29 @@ export default function App() {
         />
 
         {/* Table panel */}
-        <div className="rounded-2xl border border-slate-100 bg-white/80 backdrop-blur-sm shadow-sm p-4 sm:p-5">
+        <div className="rounded-2xl border border-slate-200/70 bg-white shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] p-4 sm:p-5">
           {/* Filter pills + legend — sticky on mobile so it stays reachable while scrolling */}
           <div
             className="sticky z-20 py-2 mb-2 bg-white/95 backdrop-blur-md rounded-xl sm:static sm:py-0 sm:mb-4 sm:bg-transparent sm:backdrop-blur-none sm:rounded-none flex flex-wrap items-center justify-between gap-3"
             style={{ top: 'var(--header-height, 52px)' }}
           >
-            <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+            <div className="flex w-full sm:w-auto sm:inline-flex items-center gap-0.5 sm:gap-1 rounded-xl bg-slate-100 p-1">
               {FILTER_TABS.map(tab => {
                 const isActive = filter === tab.key;
                 return (
                   <button
                     key={tab.key}
                     onClick={() => changeFilter(tab.key)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                    className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-1.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold transition-all active:scale-95 ${
                       isActive
-                        ? 'bg-white text-slate-900 shadow-sm'
+                        ? 'bg-white text-indigo-700 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
                     {tab.label}
                     <span
-                      className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-extrabold tabular-nums ${
-                        isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500'
+                      className={`inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] sm:text-[10px] font-extrabold tabular-nums ${
+                        isActive ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
                       }`}
                     >
                       {tabCounts[tab.key]}
@@ -274,7 +278,7 @@ export default function App() {
                     >
                       <ChevronLeft size={15} />
                     </button>
-                    <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900 text-white text-xs font-bold">
+                    <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-600 text-white text-xs font-bold shadow-sm">
                       {currentPage}
                     </span>
                     <button

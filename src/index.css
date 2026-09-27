@@ -9,14 +9,44 @@ body {
   /* Respect iOS safe areas so content isn't hidden behind notches/home bar */
   padding-bottom: env(safe-area-inset-bottom);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   /* Prevent the browser's native pull-to-refresh from fighting our custom one */
   overscroll-behavior-y: contain;
+  /* Momentum (inertial) scrolling on iOS/Safari for a smooth feel */
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Remove the grey tap flash on mobile; we handle feedback with active:scale */
 * {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth, consistent easing for interactive elements everywhere.
+   Only transition the properties that commonly change so we stay fast. */
+button,
+a,
+select,
+input,
+textarea,
+[role='button'] {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Comfortable, non-janky tap targets */
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+/* Any container that scrolls internally gets momentum + contained overscroll */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
 }
 
 /* Inputs at >=16px prevent iOS Safari from auto-zooming on focus */
@@ -37,6 +67,27 @@ body {
   background: rgb(203 213 225);
   border-radius: 9999px;
 }
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184);
+}
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) transparent;
+}
+
+/* Respect users who prefer reduced motion — disable animations for them */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
