@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  /* Respect iOS safe areas so content isn't hidden behind notches/home bar */
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Prevent the browser's native pull-to-refresh from fighting our custom one */
+  overscroll-behavior-y: contain;
+}
+
+/* Remove the grey tap flash on mobile; we handle feedback with active:scale */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inputs at >=16px prevent iOS Safari from auto-zooming on focus */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Slim, unobtrusive scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
