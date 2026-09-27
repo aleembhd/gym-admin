@@ -123,9 +123,9 @@ function ReceiptCell({
       onClick={() => onSendReceipt(member.id)}
       title="Send receipt via WhatsApp"
       aria-label="Send receipt via WhatsApp"
-      className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-white border border-slate-200 shadow-sm hover:border-green-300 hover:bg-green-50 active:scale-90 transition-all"
+      className="inline-flex items-center justify-center active:scale-90 hover:opacity-80 transition-all"
     >
-      <img src="/whatsapp.png" alt="WhatsApp" className="w-6 h-6 object-contain" />
+      <img src="/whatsapp.png" alt="WhatsApp" className="w-9 h-9 object-contain" />
     </button>
   );
 }
@@ -183,10 +183,10 @@ export default function MembersTable({
   return (
     <>
       {/* Desktop / tablet table */}
-      <div className="hidden md:block overflow-x-auto">
+      <div className="hidden md:block overflow-x-auto smooth-scroll">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100">
+            <tr className="text-[10px] font-bold uppercase tracking-widest text-slate-500 border-b border-slate-200">
               <th className="py-3 pr-4 font-bold">Member</th>
               <th className="py-3 px-4 font-bold">Contact</th>
               <th className="py-3 px-4 font-bold">Membership</th>
@@ -204,11 +204,11 @@ export default function MembersTable({
                   key={member.id}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index * 0.03, 0.3) }}
+                  transition={{ delay: Math.min(index * 0.03, 0.3), duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                   className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors"
                 >
                   <td className="py-3.5 pr-4">
-                    <span className="text-sm font-bold text-slate-800">{member.name}</span>
+                    <span className="text-sm font-bold text-slate-900">{member.name}</span>
                   </td>
                   <td className="py-3.5 px-4">
                     <p className="text-xs text-slate-700">{member.email || '—'}</p>
@@ -268,8 +268,8 @@ export default function MembersTable({
               key={member.id}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(index * 0.03, 0.25) }}
-              className="relative overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm"
+              transition={{ delay: Math.min(index * 0.03, 0.25), duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+              className="relative overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-[0_1px_8px_-2px_rgba(15,23,42,0.08)] hover:shadow-md transition-shadow"
             >
               {/* Status accent stripe */}
               <span className={`absolute left-0 top-0 bottom-0 w-1 ${tone.stripe}`} />
@@ -284,10 +284,10 @@ export default function MembersTable({
                   {/* Row 1: name + days left */}
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate leading-tight">
+                      <p className="text-sm font-bold text-slate-900 truncate leading-tight">
                         {member.name}
                       </p>
-                      <p className="text-[11px] text-slate-400 truncate">{member.phone}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{member.phone}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <DaysLeftPill member={member} withLabel />
@@ -345,7 +345,7 @@ export default function MembersTable({
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                     className="overflow-hidden"
                   >
                     <div className="px-4 pb-3 pt-1 space-y-2 border-t border-slate-100 mt-1">
