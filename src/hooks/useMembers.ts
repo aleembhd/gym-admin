@@ -277,10 +277,19 @@ export function useMembers() {
         email: payload.email || null,
         joined: payload.joined || null,
         validity: validityDays,
+        // Editing details means the receipt should be re-sendable.
+        receipt_status: false,
       })
       .eq('id', parseInt(id));
 
     if (error) throw error;
+
+    // Reset the sent state locally so the WhatsApp button comes back.
+    setSentReceipts(prev => {
+      const updated = { ...prev };
+      delete updated[id];
+      return updated;
+    });
 
     // Update local state immediately so the card reflects the edit.
     setMembers(prev =>
@@ -294,6 +303,7 @@ export function useMembers() {
               dateOfJoining: payload.joined,
               validityDays,
               daysLeft: calculateDaysLeft(payload.joined, validityDays),
+              receiptSent: false,
             }
           : m,
       ),
