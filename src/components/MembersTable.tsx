@@ -12,6 +12,8 @@ import {
   CalendarDays,
   CalendarClock,
   AlarmClock,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import type { Member, MemberFilter } from '../types';
 import { formatDate, formatRupees, getExpiryDate, membershipLabel } from '../utils/helpers';
@@ -25,6 +27,8 @@ interface MembersTableProps {
   showReceiptAction: boolean;
   filter: MemberFilter;
   hasSearch: boolean;
+  onEdit: (member: Member) => void;
+  onDelete: (member: Member) => void;
 }
 
 type Tone = { dot: string; text: string; bg: string; stripe: string };
@@ -130,6 +134,38 @@ function ReceiptCell({
   );
 }
 
+// Edit + Delete icon buttons, sat side by side.
+function ManageButtons({
+  member,
+  onEdit,
+  onDelete,
+}: {
+  member: Member;
+  onEdit: (m: Member) => void;
+  onDelete: (m: Member) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={() => onEdit(member)}
+        title="Edit member"
+        aria-label="Edit member"
+        className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 active:scale-90 transition-all"
+      >
+        <Pencil size={15} />
+      </button>
+      <button
+        onClick={() => onDelete(member)}
+        title="Delete member"
+        aria-label="Delete member"
+        className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all"
+      >
+        <Trash2 size={15} />
+      </button>
+    </div>
+  );
+}
+
 // Tailored empty-state per tab (and when a search returns nothing).
 function EmptyState({ filter, hasSearch }: { filter: MemberFilter; hasSearch: boolean }) {
   let Icon = Users;
@@ -173,6 +209,8 @@ export default function MembersTable({
   showReceiptAction,
   filter,
   hasSearch,
+  onEdit,
+  onDelete,
 }: MembersTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -193,7 +231,8 @@ export default function MembersTable({
               <th className="py-3 px-4 font-bold">Started</th>
               <th className="py-3 px-4 font-bold">Expires</th>
               <th className="py-3 px-4 font-bold">Days Left</th>
-              <th className="py-3 pl-4 font-bold">Receipt</th>
+              <th className="py-3 px-4 font-bold">Receipt</th>
+              <th className="py-3 pl-4 font-bold text-right">Manage</th>
             </tr>
           </thead>
           <tbody>
@@ -234,7 +273,7 @@ export default function MembersTable({
                       {isExpiringSoon(member) && <RenewSoonTag />}
                     </div>
                   </td>
-                  <td className="py-3.5 pl-4">
+                  <td className="py-3.5 px-4">
                     {showReceiptAction ? (
                       <ReceiptCell
                         member={member}
@@ -249,6 +288,11 @@ export default function MembersTable({
                     ) : (
                       <span className="text-xs text-slate-300">—</span>
                     )}
+                  </td>
+                  <td className="py-3.5 pl-4">
+                    <div className="flex justify-end">
+                      <ManageButtons member={member} onEdit={onEdit} onDelete={onDelete} />
+                    </div>
                   </td>
                 </motion.tr>
               );
@@ -369,14 +413,17 @@ export default function MembersTable({
                         <span>Expires: {expiry ? formatDate(expiry.toISOString()) : '—'}</span>
                       </div>
 
-                      {/* Receipt status note (send action lives on the right of the card) */}
-                      {isReceiptSent(member.id) && (
-                        <div className="pt-1">
+                      {/* Footer: receipt note (left) + manage buttons (right) */}
+                      <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100">
+                        {isReceiptSent(member.id) ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
                             <CheckCircle2 size={12} /> Receipt sent
                           </span>
-                        </div>
-                      )}
+                        ) : (
+                          <span />
+                        )}
+                        <ManageButtons member={member} onEdit={onEdit} onDelete={onDelete} />
+                      </div>
                     </div>
                   </motion.div>
                 )}

@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import type { Member } from '../types';
-import { calculateDaysLeft, monthsFromValidity, planMonthsToDays } from '../utils/helpers';
+import {
+  calculateDaysLeft,
+  monthsFromValidity,
+  normalizePhoneForWhatsApp,
+  planMonthsToDays,
+} from '../utils/helpers';
 
 export function useMembers() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -146,7 +151,8 @@ export function useMembers() {
     try {
       const payload = {
         name: member.name,
-        phone: member.phone,
+        // Normalize to 91 + 10 digits so N8N builds a valid WhatsApp link.
+        phone: normalizePhoneForWhatsApp(member.phone),
         email: member.email,
         amount: member.amount,
         daysLeft: member.daysLeft,
@@ -164,10 +170,19 @@ export function useMembers() {
 
       if (!response.ok) throw new Error(`Webhook failed with status: ${response.status}`);
 
-      // The API returns a JSON object with a whatsappLink field.
-      // Extract it and open the WhatsApp conversation in a new tab.
-      const result = await response.json();
-      const whatsappLink = result?.whatsappLink;
+      // The webhook may return a JSON object with a whatsappLink field, or it
+      // may return an empty/non-JSON body. Parse defensively so an empty
+      // response doesn't crash and wrongly report the send as failed.
+      const raw = await response.text();
+      let whatsappLink: string | undefined;
+      if (raw) {
+        try {
+          const result = JSON.parse(raw);
+          whatsappLink = result?.whatsappLink;
+        } catch {
+          // Response wasn't JSON — that's fine, just no link to open.
+        }
+      }
       if (whatsappLink) {
         window.open(whatsappLink, '_blank');
       }
@@ -236,6 +251,72 @@ export function useMembers() {
     }
   };
 
+  const updateMember = async (
+    id: string,
+    payload: { name: string; phone: string; email: string; joined: string; expires: string },
+  ) => {
+    if (!supabase || !isSupabaseConfigured) {
+      throw new Error('Supabase is not configured.');
+    }
+
+    // validity = whole days between the (edited) start and expiry dates.
+    const start = new Date(payload.joined);
+    const end = new Date(payload.expires);
+    const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const endMidnight = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    const validityDays = Math.max(
+      0,
+      Math.round((endMidnight.getTime() - startMidnight.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+
+    const { error } = await supabase
+      .from('registrations')
+      .update({
+        name: payload.name,
+        phone: payload.phone,
+        email: payload.email || null,
+        joined: payload.joined || null,
+        validity: validityDays,
+      })
+      .eq('id', parseInt(id));
+
+    if (error) throw error;
+
+    // Update local state immediately so the card reflects the edit.
+    setMembers(prev =>
+      prev.map(m =>
+        m.id === id
+          ? {
+              ...m,
+              name: payload.name,
+              phone: payload.phone,
+              email: payload.email,
+              dateOfJoining: payload.joined,
+              validityDays,
+              daysLeft: calculateDaysLeft(payload.joined, validityDays),
+            }
+          : m,
+      ),
+    );
+  };
+
+  const deleteMember = async (id: string) => {
+    if (!supabase || !isSupabaseConfigured) {
+      throw new Error('Supabase is not configured.');
+    }
+
+    const { error } = await supabase.from('registrations').delete().eq('id', parseInt(id));
+    if (error) throw error;
+
+    // Remove from local state and clear any receipt tracking.
+    setMembers(prev => prev.filter(m => m.id !== id));
+    setSentReceipts(prev => {
+      const updated = { ...prev };
+      delete updated[id];
+      return updated;
+    });
+  };
+
   const orderedMembers = [...members].sort((a, b) => {
     const aUrgent = a.daysLeft > 0 && a.daysLeft < 7;
     const bUrgent = b.daysLeft > 0 && b.daysLeft < 7;
@@ -255,5 +336,7 @@ export function useMembers() {
     handleSendReceipt,
     handleCreateMember,
     isAddingMember,
+    updateMember,
+    deleteMember,
   };
 }

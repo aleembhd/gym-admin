@@ -110,21 +110,11 @@ export default function Header({
           <button
             onClick={onBroadcast}
             title="Broadcast"
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 sm:px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200"
           >
-            <Megaphone size={15} className="text-indigo-600" />
-            <span className="hidden sm:inline">Broadcast</span>
+            <Megaphone size={16} />
+            <span>Broadcast</span>
           </button>
-
-          <div className="flex items-center gap-2 pl-0.5 sm:pl-1">
-            <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
-              KM
-            </div>
-            <div className="hidden md:block leading-tight">
-              <p className="text-sm font-bold text-slate-800">Kiran Mahendra</p>
-              <p className="text-[10px] text-slate-400 font-medium">Owner</p>
-            </div>
-          </div>
         </div>
       </div>
 

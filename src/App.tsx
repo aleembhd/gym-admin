@@ -7,6 +7,8 @@ import StatCards from './components/StatCards';
 import MembersTable from './components/MembersTable';
 import EnrollModal from './components/EnrollModal';
 import BroadcastModal from './components/BroadcastModal';
+import EditMemberModal from './components/EditMemberModal';
+import DeleteConfirmModal from './components/DeleteConfirmModal';
 import { useMembers } from './hooks/useMembers';
 import { getExpiryDate, getMemberStatus } from './utils/helpers';
 import type { Member, MemberFilter } from './types';
@@ -32,6 +34,8 @@ export default function App() {
     handleSendReceipt,
     handleCreateMember,
     isAddingMember,
+    updateMember,
+    deleteMember,
   } = useMembers();
 
   const [filter, setFilter] = useState<MemberFilter>('all');
@@ -39,6 +43,8 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [editMember, setEditMember] = useState<Member | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
 
   // Counts for the stat cards (from the full member set, ignoring search).
   const counts = useMemo(() => {
@@ -261,6 +267,8 @@ export default function App() {
                 showReceiptAction={filter === 'all' || filter === 'receipts'}
                 filter={filter}
                 hasSearch={searchQuery.trim().length > 0}
+                onEdit={setEditMember}
+                onDelete={setDeleteTarget}
               />
 
               {/* Footer: showing + pagination */}
@@ -311,6 +319,22 @@ export default function App() {
         isOpen={broadcastOpen}
         activeMembers={activeMembers}
         onClose={() => setBroadcastOpen(false)}
+      />
+
+      <EditMemberModal
+        isOpen={editMember !== null}
+        member={editMember}
+        onClose={() => setEditMember(null)}
+        onSave={updateMember}
+      />
+
+      <DeleteConfirmModal
+        isOpen={deleteTarget !== null}
+        memberName={deleteTarget?.name ?? ''}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) await deleteMember(deleteTarget.id);
+        }}
       />
     </div>
   );

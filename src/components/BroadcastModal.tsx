@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Send, X } from 'lucide-react';
 import type { Member } from '../types';
+import { normalizePhoneForWhatsApp } from '../utils/helpers';
 
 interface BroadcastModalProps {
   isOpen: boolean;
@@ -36,7 +37,11 @@ export default function BroadcastModal({ isOpen, activeMembers, onClose }: Broad
       const payload = {
         message: messageToSend,
         totalMembers: activeMembers.length,
-        members: activeMembers.map(m => ({ name: m.name, phone: m.phone, email: m.email })),
+        members: activeMembers.map(m => ({
+          name: m.name,
+          phone: normalizePhoneForWhatsApp(m.phone),
+          email: m.email,
+        })),
         timestamp: new Date().toISOString(),
       };
 
