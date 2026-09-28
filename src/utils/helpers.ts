@@ -77,6 +77,33 @@ export const getMemberStatus = (member: {
   return member.daysLeft > 0 ? 'active' : 'expired';
 };
 
+// Normalize an Indian mobile number to WhatsApp format: 91 + 10 digits.
+// The owner enters a plain 10-digit number. We only prepend the 91 country
+// code; we never strip a leading "91" from a 10-digit number (e.g. 9100171266
+// is a valid number, not a country code + 00171266).
+export const normalizePhoneForWhatsApp = (phone: string): string => {
+  // Keep digits only (drops +, spaces, dashes, etc.)
+  let digits = (phone || '').replace(/\D/g, '');
+
+  // Strip a leading 0 (e.g. 09100171266 -> 9100171266)
+  if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+
+  // Exactly 10 digits => a local number, add the country code.
+  if (digits.length === 10) {
+    return `91${digits}`;
+  }
+
+  // Already 12 digits starting with 91 => already normalized.
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits;
+  }
+
+  // Anything else: return the digits as-is (best effort).
+  return digits;
+};
+
 // Two-letter initials from a name, e.g. "Meera Iyer" -> "MI".
 export const getInitials = (name: string): string => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
